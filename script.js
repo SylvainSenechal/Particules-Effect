@@ -1,13 +1,14 @@
 'use strict';
 
-const NB_PARTICULES = 5000
-const SIZE_ARRAY_INTERPOLATION = 100
+const NB_PARTICULES = 30
+const SIZE_ARR = 10
+const DEPTH = 256
+const MAX_SIZE_POINT = 10
 
 let ctx, canvas
 let width, height
 let mouse = {x: 0, y: 0}
 let particules = undefined
-let noise = new Array(SIZE_ARRAY_INTERPOLATION).fill().map( () => new Float32Array(SIZE_ARRAY_INTERPOLATION)).map(row => row.map(col => Math.random() * 360))
 
 const init = () => {
   canvas = document.getElementById('canvas')
@@ -24,40 +25,63 @@ const init = () => {
 let time = 0
 const loop = () => {
   time+=0.00273
-  noise = noise.map(row => row.map(col => col + 1))
+  // noise = noise.map(row => row.map(col => col + 1))
   draw(particules)
   particules.forEach(p => p.move())
 
   requestAnimationFrame(loop)
 }
 
+// TODO: voir pourquoi ils vont vers la gauche
+// TODO: Gradient de couleur sur les lignes entre eux
+// TODO: régler le clignotement aux bordures ( les virer et remettre au milieu ?)
 class Particule {
   constructor(width, height) {
-    this.position = {x: Math.random() * width, y: Math.random() * height}
+    this.position = {x: Math.random() * width, y: Math.random() * height, z: Math.random() * DEPTH}
     this.orientation = Math.random() * 360
     this.speed = 1 // TODO: speed variable ?
-    // TODO: voir 3d
+    this.noise = new Float32Array(SIZE_ARR * SIZE_ARR * SIZE_ARR).map( () => Math.random() * 360)
+    // console.log(this.noise)
+    // this.noise = new Array(SIZE_ARR).fill()
+    // .map( () => new Float32Array(SIZE_ARR))
+    // .map(row => row.map(col => Math.random() * 360))
   }
   move = () => {
-
-
-    let x = linearInterpolation(this.position.x, 0, width, 0, SIZE_ARRAY_INTERPOLATION-2)
-    let y = linearInterpolation(this.position.y, 0, height, 0, SIZE_ARRAY_INTERPOLATION-2)
+    // faire une fonction pour ça
+    let x = linearInterpolation(this.position.x, 0, width, 0, SIZE_ARR-2)
+    let y = linearInterpolation(this.position.y, 0, height, 0, SIZE_ARR-2)
+    let z = linearInterpolation(this.position.z, 0, DEPTH, 0, SIZE_ARR-2)
     let xCase = Math.floor(x)
     let yCase = Math.floor(y)
+    let zCase = Math.floor(z)
+    // [zCase + SIZE_ARR * yCase + SIZE_ARR * SIZE_ARR * xCase]
+    // let interpolateX12 = interpolate(x % 1, this.noise[xCase][yCase][zCase], this.noise[xCase + 1][yCase][zCase])
+    // let interpolateX34 = interpolate(x % 1, this.noise[xCase][yCase + 1][zCase], this.noise[xCase + 1][yCase + 1][zCase])
+    // let interpolationX1234 = interpolate(y % 1, interpolateX12, interpolateX34)
+    // let interpolateX56 = interpolate(x % 1, this.noise[xCase][yCase][zCase+1], this.noise[xCase + 1][yCase][zCase+1])
+    // let interpolateX78 = interpolate(x % 1, this.noise[xCase][yCase + 1][zCase+1], this.noise[xCase + 1][yCase + 1][zCase+1])
+    // let interpolationX5678 = interpolate(y % 1, interpolateX56, interpolateX78)
+    // let interpolationX12345678 = interpolate(z % 1, interpolationX1234, interpolationX5678)
 
-    let interpolateX1 = interpolate(x % 1, noise[xCase][yCase], noise[xCase + 1][yCase])
-    let interpolateX2 = interpolate(x % 1, noise[xCase][yCase + 1], noise[xCase + 1][yCase + 1])
-    let interpolation = interpolate(y % 1, interpolateX1, interpolateX2)
+    let interpolateX12 = interpolate(x % 1, this.noise[zCase + SIZE_ARR * yCase + SIZE_ARR * SIZE_ARR * xCase], this.noise[zCase + SIZE_ARR * yCase + SIZE_ARR * SIZE_ARR * (xCase + 1)])
+    let interpolateX34 = interpolate(x % 1, this.noise[zCase + SIZE_ARR * (yCase + 1) + SIZE_ARR * SIZE_ARR * xCase], this.noise[zCase + SIZE_ARR * (yCase + 1) + SIZE_ARR * SIZE_ARR * (xCase + 1)])
+    let interpolationX1234 = interpolate(y % 1, interpolateX12, interpolateX34)
+    let interpolateX56 = interpolate(x % 1, this.noise[(zCase + 1) + SIZE_ARR * yCase + SIZE_ARR * SIZE_ARR * xCase], this.noise[(zCase + 1) + SIZE_ARR * yCase + SIZE_ARR * SIZE_ARR * (xCase + 1)])
+    let interpolateX78 = interpolate(x % 1, this.noise[(zCase + 1) + SIZE_ARR * (yCase + 1) + SIZE_ARR * SIZE_ARR * xCase], this.noise[(zCase + 1) + SIZE_ARR * (yCase + 1) + SIZE_ARR * SIZE_ARR * (xCase + 1)])
+    let interpolationX5678 = interpolate(y % 1, interpolateX56, interpolateX78)
+    let interpolationX12345678 = interpolate(z % 1, interpolationX1234, interpolationX5678)
 
-    this.orientation = interpolation// * time % 360
+    this.orientation = interpolationX12345678// * time % 360
     this.position.x += Math.cos((this.orientation) * Math.PI / 180) * this.speed
     this.position.y += Math.sin((this.orientation) * Math.PI / 180) * this.speed
+    this.position.z += Math.sin((this.orientation) * Math.PI / 180) * this.speed
 
     if (this.position.x > width) this.position.x = 5
     if (this.position.x < 0) this.position.x = width - 5
     if (this.position.y > height) this.position.y = 5
     if (this.position.y < 0) this.position.y = height - 5
+    if (this.position.z > DEPTH) this.position.z = 5
+    if (this.position.z < 0) this.position.z = DEPTH - 5
   }
 }
 
@@ -66,16 +90,21 @@ const draw = particules => {
   ctx.fillStyle = "#000000"
 
   particules.forEach(particule => {
+    let size = linearInterpolation(particule.position.z, 0, DEPTH, 1, MAX_SIZE_POINT)
     ctx.beginPath()
-    ctx.arc(particule.position.x, particule.position.y, 5, 0, 2*Math.PI)
+    ctx.arc(particule.position.x, particule.position.y, size, 0, 2*Math.PI)
     ctx.fill()
   })
-  // particules.forEach(particule => {
-  //   ctx.beginPath()
-  //   ctx.moveTo(particule.position.x, particule.position.y)
-  //   ctx.lineTo(mouse.x,mouse.y)
-  //   ctx.stroke()
-  // })
+  particules.forEach(particule => {
+    ctx.beginPath()
+    let gradient = ctx.createLinearGradient(mouse.x, mouse.y, particule.position.x, particule.position.y)
+    gradient.addColorStop(0, '#000000')
+    gradient.addColorStop(1, '#ffffff')
+    ctx.strokeStyle = gradient
+    ctx.moveTo(particule.position.x, particule.position.y)
+    ctx.lineTo(mouse.x, mouse.y)
+    ctx.stroke()
+  })
   ctx.beginPath()
   ctx.arc(mouse.x, mouse.y, 5, 0, 2*Math.PI)
   ctx.fill()
